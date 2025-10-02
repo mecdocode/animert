@@ -8,7 +8,7 @@ A retro 90s-inspired anime recommendation system with authentic CRT monitor aest
 - **AI-Powered Recommendations**: Uses OpenRouter AI to analyze your preferences
 - **AniList Integration**: Fetches detailed anime information with English titles
 - **Interactive Quiz**: 5 carefully crafted questions to understand your taste
-- **Vintage Animations**: Boot sequences, glitch effects, and retro loading screens
+- **Vintage Animations**: Boot sequences, glitch effects, and retro loading 
 - **Responsive Design**: Works on desktop and mobile with maintained retro feel
 
 ## 🚀 Quick Start
