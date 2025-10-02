@@ -1,11 +1,37 @@
 import axios from 'axios'
 
-// Fallback anime recommendations
-const FALLBACK_RECOMMENDATIONS = [
-  "Attack on Titan", "Death Note", "Your Name", "Spirited Away", "Demon Slayer",
-  "One Piece", "Naruto", "Dragon Ball Z", "My Hero Academia", "Fullmetal Alchemist: Brotherhood",
-  "Hunter x Hunter", "One Punch Man", "Mob Psycho 100", "Jujutsu Kaisen", "Tokyo Ghoul"
-]
+// Diverse fallback anime recommendations by category
+const FALLBACK_RECOMMENDATIONS = {
+  popular: ["Attack on Titan", "Death Note", "My Hero Academia", "Demon Slayer", "Jujutsu Kaisen"],
+  classics: ["Cowboy Bebop", "Neon Genesis Evangelion", "Akira", "Ghost in the Shell", "Princess Mononoke"],
+  hidden_gems: ["Monster", "Steins;Gate", "Parasyte", "Made in Abyss", "Vinland Saga"],
+  comedy: ["One Punch Man", "Mob Psycho 100", "Konosuba", "Gintama", "The Devil is a Part-Timer"],
+  romance: ["Your Name", "A Silent Voice", "Weathering with You", "Toradora!", "Kaguya-sama"],
+  action: ["Fullmetal Alchemist: Brotherhood", "Hunter x Hunter", "Chainsaw Man", "Black Clover", "Fire Force"],
+  slice_of_life: ["March Comes in Like a Lion", "Violet Evergarden", "Barakamon", "Silver Spoon", "Mushishi"],
+  thriller: ["Tokyo Ghoul", "Psycho-Pass", "Another", "Erased", "Future Diary"]
+}
+
+// Function to get diverse fallback recommendations
+function getDiverseFallbacks(count = 15) {
+  const categories = Object.keys(FALLBACK_RECOMMENDATIONS)
+  const selected = []
+  const perCategory = Math.floor(count / categories.length)
+  const remainder = count % categories.length
+  
+  // Get equal representation from each category
+  categories.forEach((category, index) => {
+    const categoryAnime = FALLBACK_RECOMMENDATIONS[category]
+    const takeCount = perCategory + (index < remainder ? 1 : 0)
+    
+    // Shuffle and take required amount
+    const shuffled = [...categoryAnime].sort(() => Math.random() - 0.5)
+    selected.push(...shuffled.slice(0, takeCount))
+  })
+  
+  // Final shuffle to mix categories
+  return selected.sort(() => Math.random() - 0.5).slice(0, count)
+}
 
 // OpenRouter AI Service
 async function getAIRecommendations(userPreferences, retryCount = 0) {
@@ -13,14 +39,20 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
   
   try {
     console.log(`AI request attempt ${retryCount + 1}/${maxRetries + 1}`)
-    const prompt = buildPrompt(userPreferences)
+    
+    // Generate session ID for diversity
+    const sessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+    const prompt = buildPrompt(userPreferences, sessionId)
+    
+    // Increase temperature for more variety, add randomness
+    const temperature = 0.8 + (Math.random() * 0.2) // 0.8-1.0 for more creativity
     
     const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
       model: 'meta-llama/llama-3.1-8b-instruct:free',
       messages: [
         {
           role: 'system',
-          content: 'You are an anime recommendation expert. Always respond with ONLY a valid JSON array of exactly 15 anime titles in English. No explanations, no additional text, just the JSON array.'
+          content: 'You are an anime recommendation expert with extensive knowledge of both popular and obscure anime. Always respond with ONLY a valid JSON array of exactly 15 diverse anime titles in English. Prioritize variety and avoid repetitive suggestions. No explanations, just the JSON array.'
         },
         {
           role: 'user',
@@ -28,7 +60,10 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
         }
       ],
       max_tokens: 800,
-      temperature: 0.7
+      temperature: temperature,
+      top_p: 0.9, // Add nucleus sampling for more diversity
+      frequency_penalty: 0.5, // Reduce repetition
+      presence_penalty: 0.3 // Encourage new topics
     }, {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -89,9 +124,9 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
       return getAIRecommendations(userPreferences, retryCount + 1)
     }
     
-    // If all retries failed, use fallback recommendations
-    console.log('All AI attempts failed, using fallback recommendations')
-    return FALLBACK_RECOMMENDATIONS
+    // If all retries failed, use diverse fallback recommendations
+    console.log('All AI attempts failed, using diverse fallback recommendations')
+    return getDiverseFallbacks(15)
   }
 }
 
@@ -185,14 +220,24 @@ async function getAnimeDetails(titles) {
   return results
 }
 
-// Build AI prompt based on user preferences
-function buildPrompt(preferences) {
+// Build AI prompt based on user preferences with randomization for diversity
+function buildPrompt(preferences, sessionId = null) {
   const { favoriteAnime, vibe, genres, dealbreakers, keywords } = preferences
   
-  let prompt = 'Based on the following preferences, recommend exactly 15 anime titles in English:\n\n'
+  // Add randomization elements to prevent identical recommendations
+  const diversityPrompts = [
+    'Discover fresh anime recommendations based on these preferences:',
+    'Find unique anime titles matching these criteria:',
+    'Suggest diverse anime series based on the following:',
+    'Recommend varied anime titles considering these preferences:',
+    'Explore different anime options matching these requirements:'
+  ]
+  
+  const randomPromptStart = diversityPrompts[Math.floor(Math.random() * diversityPrompts.length)]
+  let prompt = `${randomPromptStart}\n\n`
   
   if (favoriteAnime?.trim()) {
-    prompt += `Favorite anime: "${favoriteAnime}"\n`
+    prompt += `Reference anime: "${favoriteAnime}" (suggest similar but different titles)\n`
   }
   
   if (vibe) {
@@ -202,7 +247,7 @@ function buildPrompt(preferences) {
       funny: 'Funny & Lighthearted: Comedy, parody, satirical content',
       dark: 'Dark & Thought-Provoking: Complex themes, psychological depth'
     }
-    prompt += `Desired vibe: ${vibeDescriptions[vibe] || vibe}\n`
+    prompt += `Desired mood: ${vibeDescriptions[vibe] || vibe}\n`
   }
   
   if (genres && genres.length > 0) {
@@ -212,19 +257,36 @@ function buildPrompt(preferences) {
   if (dealbreakers && dealbreakers.length > 0) {
     const dealbreakerDescriptions = {
       slow: 'Avoid slow pacing',
-      complex: 'Avoid complex plots',
+      complex: 'Avoid complex plots', 
       violence: 'Avoid excessive violence/gore',
       old: 'Avoid older animation styles (prefer post-2010)'
     }
     const avoidList = dealbreakers.map(db => dealbreakerDescriptions[db] || db)
-    prompt += `Things to avoid: ${avoidList.join(', ')}\n`
+    prompt += `Exclude: ${avoidList.join(', ')}\n`
   }
   
   if (keywords?.trim()) {
-    prompt += `Keywords/themes: "${keywords}"\n`
+    prompt += `Themes/elements: "${keywords}"\n`
   }
   
-  prompt += '\nRespond with ONLY a JSON array of exactly 15 anime titles in English. Example format: ["Attack on Titan", "Death Note", "Your Name", ...]'
+  // Add diversity instructions
+  const diversityInstructions = [
+    'Include a mix of popular and hidden gems.',
+    'Vary between different time periods and studios.',
+    'Balance mainstream hits with lesser-known quality series.',
+    'Mix different sub-genres and storytelling styles.',
+    'Include both classic and modern recommendations.'
+  ]
+  
+  const randomDiversity = diversityInstructions[Math.floor(Math.random() * diversityInstructions.length)]
+  prompt += `\nDiversity requirement: ${randomDiversity}\n`
+  
+  // Add session-based variation if provided
+  if (sessionId) {
+    prompt += `Session context: ${sessionId.slice(-8)} (ensure variety from previous requests)\n`
+  }
+  
+  prompt += '\nRespond with ONLY a valid JSON array of exactly 15 diverse anime titles in English. No explanations, just the array: ["Title 1", "Title 2", ...]'
   
   return prompt
 }
@@ -256,8 +318,9 @@ async function getRecommendations(userPreferences) {
     
     // If we have very few results, ensure we have at least some recommendations
     if (uniqueResults.length < 3) {
-      console.log('Too few results, trying fallback titles...')
-      const fallbackDetails = await getAnimeDetails(FALLBACK_RECOMMENDATIONS.slice(0, 10))
+      console.log('Too few results, trying diverse fallback titles...')
+      const fallbackTitles = getDiverseFallbacks(10)
+      const fallbackDetails = await getAnimeDetails(fallbackTitles)
       const combinedResults = [...uniqueResults, ...fallbackDetails]
         .reduce((acc, current) => {
           const existing = acc.find(item => item.id === current.id)
@@ -277,10 +340,11 @@ async function getRecommendations(userPreferences) {
   } catch (error) {
     console.error('Error in getRecommendations:', error)
     
-    // Last resort: return fallback recommendations with details
+    // Last resort: return diverse fallback recommendations with details
     try {
-      console.log('Using complete fallback system...')
-      const fallbackDetails = await getAnimeDetails(FALLBACK_RECOMMENDATIONS)
+      console.log('Using complete diverse fallback system...')
+      const fallbackTitles = getDiverseFallbacks(15)
+      const fallbackDetails = await getAnimeDetails(fallbackTitles)
       return fallbackDetails.slice(0, 15)
     } catch (fallbackError) {
       console.error('Even fallback failed:', fallbackError)

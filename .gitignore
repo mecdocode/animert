@@ -47,5 +47,5 @@ coverage/
 .vercel
 
 # Local development
-server/
+# server/ - Removed to include server logic in deployment
 !api/
