@@ -7,6 +7,10 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
   try {
     const prompt = buildPrompt(userPreferences)
     
+    console.log('Making request to OpenRouter with model: meta-llama/llama-3.1-8b-instruct:free')
+    console.log('API Key present:', !!process.env.OPENROUTER_API_KEY)
+    console.log('API Key length:', process.env.OPENROUTER_API_KEY?.length || 0)
+    
     const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
       model: 'meta-llama/llama-3.3-8b-instruct:free',
       messages: [
@@ -25,10 +29,10 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://animert-j8j5jspon-mecs-projects-96110a08.vercel.app',
+        'HTTP-Referer': 'https://animert-2jht96jd3-mecs-projects-96110a08.vercel.app',
         'X-Title': 'Anime Recommendation Terminal'
       },
-      timeout: 30000
+      timeout: 45000
     })
 
     const aiResponse = response.data.choices[0]?.message?.content?.trim()
@@ -69,10 +73,16 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
 
   } catch (error) {
     console.error(`AI request failed (attempt ${retryCount + 1}):`, error.message)
+    console.error('Full error details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      headers: error.response?.headers
+    })
     
     if (retryCount < maxRetries) {
-      console.log(`Retrying AI request in 1 second...`)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      console.log(`Retrying AI request in 2 seconds...`)
+      await new Promise(resolve => setTimeout(resolve, 2000))
       return getAIRecommendations(userPreferences, retryCount + 1)
     }
     
