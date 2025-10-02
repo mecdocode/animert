@@ -1,14 +1,22 @@
 import axios from 'axios'
 
+// Fallback anime recommendations
+const FALLBACK_RECOMMENDATIONS = [
+  "Attack on Titan", "Death Note", "Your Name", "Spirited Away", "Demon Slayer",
+  "One Piece", "Naruto", "Dragon Ball Z", "My Hero Academia", "Fullmetal Alchemist: Brotherhood",
+  "Hunter x Hunter", "One Punch Man", "Mob Psycho 100", "Jujutsu Kaisen", "Tokyo Ghoul"
+]
+
 // OpenRouter AI Service
 async function getAIRecommendations(userPreferences, retryCount = 0) {
-  const maxRetries = 2
+  const maxRetries = 3
   
   try {
+    console.log(`AI request attempt ${retryCount + 1}/${maxRetries + 1}`)
     const prompt = buildPrompt(userPreferences)
     
     const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: 'meta-llama/llama-3.3-8b-instruct:free',
+      model: 'meta-llama/llama-3.1-8b-instruct:free',
       messages: [
         {
           role: 'system',
@@ -19,16 +27,16 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
           content: prompt
         }
       ],
-      max_tokens: 500,
+      max_tokens: 800,
       temperature: 0.7
     }, {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://retro-anime-terminal.vercel.app',
+        'HTTP-Referer': 'https://animert-j8j5jspon-mecs-projects-96110a08.vercel.app',
         'X-Title': 'Anime Recommendation Terminal'
       },
-      timeout: 30000
+      timeout: 45000
     })
 
     const aiResponse = response.data.choices[0]?.message?.content?.trim()
@@ -69,14 +77,21 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
 
   } catch (error) {
     console.error(`AI request failed (attempt ${retryCount + 1}):`, error.message)
+    console.error('Error details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    })
     
     if (retryCount < maxRetries) {
-      console.log(`Retrying AI request in 1 second...`)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      console.log(`Retrying AI request in ${(retryCount + 1) * 2} seconds...`)
+      await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 2000))
       return getAIRecommendations(userPreferences, retryCount + 1)
     }
     
-    throw new Error('AI_CONNECTION_ERROR: Could not generate recommendations')
+    // If all retries failed, use fallback recommendations
+    console.log('All AI attempts failed, using fallback recommendations')
+    return FALLBACK_RECOMMENDATIONS
   }
 }
 
@@ -220,6 +235,7 @@ async function getRecommendations(userPreferences) {
     console.log('Getting AI recommendations...')
     const aiTitles = await getAIRecommendations(userPreferences)
     
+    console.log(`Received ${aiTitles.length} titles:`, aiTitles)
     console.log('Fetching anime details from AniList...')
     const animeDetails = await getAnimeDetails(aiTitles)
     
@@ -237,11 +253,39 @@ async function getRecommendations(userPreferences) {
       .slice(0, 15) // Ensure we only return max 15 results
     
     console.log(`Returning ${uniqueResults.length} unique recommendations`)
+    
+    // If we have very few results, ensure we have at least some recommendations
+    if (uniqueResults.length < 3) {
+      console.log('Too few results, trying fallback titles...')
+      const fallbackDetails = await getAnimeDetails(FALLBACK_RECOMMENDATIONS.slice(0, 10))
+      const combinedResults = [...uniqueResults, ...fallbackDetails]
+        .reduce((acc, current) => {
+          const existing = acc.find(item => item.id === current.id)
+          if (!existing) {
+            acc.push(current)
+          }
+          return acc
+        }, [])
+        .sort((a, b) => (b.averageScore || 0) - (a.averageScore || 0))
+        .slice(0, 15)
+      
+      return combinedResults
+    }
+    
     return uniqueResults
     
   } catch (error) {
     console.error('Error in getRecommendations:', error)
-    throw error
+    
+    // Last resort: return fallback recommendations with details
+    try {
+      console.log('Using complete fallback system...')
+      const fallbackDetails = await getAnimeDetails(FALLBACK_RECOMMENDATIONS)
+      return fallbackDetails.slice(0, 15)
+    } catch (fallbackError) {
+      console.error('Even fallback failed:', fallbackError)
+      throw new Error('SYSTEM_ERROR: Unable to retrieve any recommendations')
+    }
   }
 }
 
@@ -276,13 +320,9 @@ export default async function handler(req, res) {
     try {
       console.log('Received recommendation request:', JSON.stringify(req.body, null, 2))
       
-      // Check if API key is configured
+      // Check if API key is configured (but don't fail completely - we have fallbacks)
       if (!process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY === 'your_openrouter_api_key_here') {
-        console.error('OPENROUTER_API_KEY not configured')
-        return res.status(503).json({
-          error: 'CONFIGURATION_ERROR',
-          message: 'API service not properly configured. Please contact administrator.'
-        })
+        console.warn('OPENROUTER_API_KEY not configured, will use fallback recommendations')
       }
       
       const { favoriteAnime, vibe, genres, dealbreakers, keywords } = req.body
@@ -314,31 +354,25 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error in recommendations endpoint:', error)
       
-      // Handle specific error types
-      if (error.message.includes('AI_CONNECTION_ERROR')) {
-        return res.status(503).json({
-          error: 'AI_CONNECTION_ERROR',
-          message: 'Could not generate recommendations. AI service temporarily unavailable.'
-        })
-      }
+      // Since we have robust fallbacks, most errors should be handled gracefully
+      // Only return errors for truly unrecoverable situations
       
-      if (error.message.includes('ANILIST_DB_ERROR')) {
+      if (error.message.includes('SYSTEM_ERROR: Unable to retrieve any recommendations')) {
         return res.status(503).json({
-          error: 'ANILIST_DB_ERROR',
-          message: 'Could not retrieve anime details. Database temporarily unavailable.'
+          error: 'SYSTEM_ERROR',
+          message: 'All recommendation services are temporarily unavailable. Please try again later.'
         })
       }
 
-      // Network or timeout errors
-      if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-        return res.status(503).json({
-          error: 'TIMEOUT_ERROR',
-          message: 'Request timed out. Please try again.'
-        })
-      }
+      // For any other error, return a generic message but log details
+      console.error('Unexpected error details:', {
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      })
 
       return res.status(500).json({
-        error: 'SYSTEM_ERROR',
+        error: 'UNEXPECTED_ERROR',
         message: 'An unexpected error occurred. Please try again.',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       })

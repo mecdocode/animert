@@ -2,8 +2,6 @@ import React from 'react'
 import QRCodeComponent from './QRCodeComponent'
 
 const DonationModal = ({ isOpen, onClose }) => {
-  if (!isOpen) return null
-
   // Handle backdrop click to close modal
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
@@ -12,19 +10,31 @@ const DonationModal = ({ isOpen, onClose }) => {
   }
 
   // Handle escape key to close modal
-  const handleKeyDown = (e) => {
+  const handleKeyDown = React.useCallback((e) => {
     if (e.key === 'Escape') {
       onClose()
     }
-  }
+  }, [onClose])
 
-  // Add event listener for escape key
+  // Handle body scroll lock and escape key
   React.useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
+    if (isOpen) {
+      // Lock body scroll
+      const originalStyle = window.getComputedStyle(document.body).overflow
+      document.body.style.overflow = 'hidden'
+      
+      // Add escape key listener
+      document.addEventListener('keydown', handleKeyDown)
+      
+      // Cleanup function
+      return () => {
+        document.body.style.overflow = originalStyle
+        document.removeEventListener('keydown', handleKeyDown)
+      }
     }
-  }, [])
+  }, [isOpen, handleKeyDown])
+
+  if (!isOpen) return null
 
   return (
     <div 
