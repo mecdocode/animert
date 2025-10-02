@@ -1,12 +1,8 @@
 import express from 'express'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import { getRecommendations } from './services/recommendationService.js'
 
-dotenv.config()
-
 const app = express()
-const PORT = process.env.PORT || 3001
 
 // Middleware
 app.use(cors())
@@ -14,13 +10,26 @@ app.use(express.json())
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Anime Recommendation Terminal API is running' })
+  res.json({ 
+    status: 'OK', 
+    message: 'Anime Recommendation Terminal API is running',
+    timestamp: new Date().toISOString()
+  })
 })
 
 // Main recommendation endpoint
 app.post('/api/recommendations', async (req, res) => {
   try {
-    console.log('Received recommendation request:', req.body)
+    console.log('Received recommendation request:', JSON.stringify(req.body, null, 2))
+    
+    // Check if API key is configured
+    if (!process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY === 'your_openrouter_api_key_here') {
+      console.error('OPENROUTER_API_KEY not configured')
+      return res.status(503).json({
+        error: 'CONFIGURATION_ERROR',
+        message: 'API service not properly configured. Please contact administrator.'
+      })
+    }
     
     const { favoriteAnime, vibe, genres, dealbreakers, keywords } = req.body
     
@@ -33,7 +42,7 @@ app.post('/api/recommendations', async (req, res) => {
 
     if (!hasInput) {
       return res.status(400).json({ 
-        error: 'INPUT REQUIRED',
+        error: 'INPUT_REQUIRED',
         message: 'At least one field must be filled out' 
       })
     }
@@ -44,7 +53,8 @@ app.post('/api/recommendations', async (req, res) => {
     res.json({
       success: true,
       recommendations,
-      count: recommendations.length
+      count: recommendations.length,
+      timestamp: new Date().toISOString()
     })
 
   } catch (error) {
@@ -65,7 +75,7 @@ app.post('/api/recommendations', async (req, res) => {
       })
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'SYSTEM_ERROR',
       message: 'An unexpected error occurred. Please try again.'
     })
@@ -81,15 +91,22 @@ app.use((err, req, res, next) => {
   })
 })
 
-// 404 handler
-app.use('*', (req, res) => {
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
   res.status(404).json({
     error: 'NOT_FOUND',
-    message: 'Endpoint not found'
+    message: 'API endpoint not found'
   })
 })
 
-app.listen(PORT, () => {
-  console.log(`🚀 Anime Recommendation Terminal API running on port ${PORT}`)
-  console.log(`📡 Health check: http://localhost:${PORT}/api/health`)
-})
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3001
+  app.listen(PORT, () => {
+    console.log(`🚀 Anime Recommendation Terminal API running on port ${PORT}`)
+    console.log(`📡 Health check: http://localhost:${PORT}/api/health`)
+  })
+}
+
+// Export for Vercel
+export default app
