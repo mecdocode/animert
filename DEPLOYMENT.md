@@ -15,7 +15,7 @@ git init
 git add .
 
 # Commit
-git commit -m "Initial commit: Retro Anime Terminal"
+c
 
 # Add remote (replace with your repo URL)
 git remote add origin https://github.com/YOUR_USERNAME/retro-anime-terminal.git
