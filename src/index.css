@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom CRT and Retro Styles */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  
+  body {
+    font-family: 'VT323', monospace;
+    background-color: #000;
+    color: #dff9fb;
+    line-height: 1.2;
+  }
+}
+
+@layer components {
+  /* CRT Monitor Container */
+  .crt-monitor {
+    background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+    border: 8px solid #333;
+    border-radius: 20px;
+    box-shadow: 
+      inset 0 0 50px rgba(0, 0, 0, 0.8),
+      0 0 50px rgba(0, 0, 0, 0.5);
+    position: relative;
+  }
+  
+  .crt-monitor::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    right: -8px;
+    bottom: -8px;
+    background: linear-gradient(45deg, #444, #222);
+    border-radius: 28px;
+    z-index: -1;
+  }
+  
+  /* Terminal Screen */
+  .terminal-screen {
+    background: #1a1a2e;
+    border: 2px solid #00ff41;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* Retro Button */
+  .retro-btn {
+    @apply font-terminal text-lg px-6 py-3 border-2 border-crt-cyan bg-transparent text-crt-cyan;
+    @apply hover:bg-crt-cyan hover:text-crt-bg transition-all duration-75;
+    @apply focus:outline-none focus:ring-2 focus:ring-crt-cyan focus:ring-offset-2 focus:ring-offset-crt-bg;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  
+  /* Retro Input */
+  .retro-input {
+    @apply font-terminal text-lg px-4 py-2 border-2 border-crt-green bg-transparent text-crt-text;
+    @apply focus:border-crt-cyan focus:outline-none focus:ring-2 focus:ring-crt-cyan focus:ring-opacity-50;
+    background-color: rgba(26, 26, 46, 0.8);
+  }
+  
+  /* Retro Checkbox/Radio */
+  .retro-checkbox {
+    @apply appearance-none w-6 h-6 border-2 border-crt-green bg-transparent;
+    @apply checked:bg-crt-green checked:border-crt-green;
+    @apply focus:outline-none focus:ring-2 focus:ring-crt-cyan focus:ring-opacity-50;
+    position: relative;
+  }
+  
+  .retro-checkbox:checked::after {
+    content: '■';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #1a1a2e;
+    font-size: 14px;
+    font-weight: bold;
+  }
+  
+  /* Anime Card */
+  .anime-card {
+    @apply border-2 border-crt-text bg-terminal-light p-4 transition-all duration-75;
+    @apply hover:border-crt-magenta hover:bg-terminal-dark;
+  }
+  
+  .anime-card:hover {
+    box-shadow: 0 0 20px rgba(255, 0, 255, 0.3);
+  }
+  
+  /* Loading Animation */
+  .loading-dots::after {
+    content: '';
+    animation: loading-dots 1.5s infinite;
+  }
+  
+  @keyframes loading-dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+  }
+  
+  /* Glitch Effect */
+  .glitch {
+    position: relative;
+  }
+  
+  .glitch::before,
+  .glitch::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+  
+  .glitch::before {
+    animation: glitch-1 0.5s infinite;
+    color: #ff00ff;
+    z-index: -1;
+  }
+  
+  .glitch::after {
+    animation: glitch-2 0.5s infinite;
+    color: #00ffff;
+    z-index: -2;
+  }
+  
+  @keyframes glitch-1 {
+    0%, 14%, 15%, 49%, 50%, 99%, 100% { transform: translate(0, 0); }
+    15%, 49% { transform: translate(-2px, -1px); }
+  }
+  
+  @keyframes glitch-2 {
+    0%, 20%, 21%, 62%, 63%, 99%, 100% { transform: translate(0, 0); }
+    21%, 62% { transform: translate(2px, 1px); }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "retro-anime-terminal",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A retro 90s anime recommendation terminal with CRT aesthetics",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node server/index.js",
+    "vercel-build": "npm run build"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "axios": "^1.6.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "vite": "^5.0.8"
+  },
+  "keywords": ["anime", "recommendation", "retro", "90s", "terminal", "crt"],
+  "author": "Retro Anime Terminal",
+  "license": "MIT"
+}
