@@ -12,24 +12,85 @@ const FALLBACK_RECOMMENDATIONS = {
   thriller: ["Tokyo Ghoul", "Psycho-Pass", "Another", "Erased", "Future Diary"]
 }
 
-// Function to get diverse fallback recommendations
-function getDiverseFallbacks(count = 15) {
+// Function to get user-preference-aware fallback recommendations
+function getDiverseFallbacks(count = 15, userPreferences = {}) {
+  const { vibe, genres, dealbreakers } = userPreferences
   const categories = Object.keys(FALLBACK_RECOMMENDATIONS)
-  const selected = []
-  const perCategory = Math.floor(count / categories.length)
-  const remainder = count % categories.length
+  let selected = []
   
-  // Get equal representation from each category
-  categories.forEach((category, index) => {
-    const categoryAnime = FALLBACK_RECOMMENDATIONS[category]
-    const takeCount = perCategory + (index < remainder ? 1 : 0)
+  // If user has specific preferences, prioritize matching categories
+  if (vibe || (genres && genres.length > 0)) {
+    const priorityCategories = []
     
-    // Shuffle and take required amount
-    const shuffled = [...categoryAnime].sort(() => Math.random() - 0.5)
-    selected.push(...shuffled.slice(0, takeCount))
-  })
+    // Map user preferences to categories
+    if (vibe === 'funny') priorityCategories.push('comedy')
+    if (vibe === 'epic') priorityCategories.push('action', 'popular')
+    if (vibe === 'relaxing') priorityCategories.push('slice_of_life', 'romance')
+    if (vibe === 'dark') priorityCategories.push('thriller', 'hidden_gems')
+    
+    if (genres) {
+      if (genres.includes('Action')) priorityCategories.push('action')
+      if (genres.includes('Comedy')) priorityCategories.push('comedy')
+      if (genres.includes('Romance')) priorityCategories.push('romance')
+      if (genres.includes('Thriller') || genres.includes('Horror')) priorityCategories.push('thriller')
+      if (genres.includes('Slice of Life')) priorityCategories.push('slice_of_life')
+    }
+    
+    // Get more from priority categories
+    const uniquePriorities = [...new Set(priorityCategories)]
+    if (uniquePriorities.length > 0) {
+      const perPriorityCategory = Math.floor(count * 0.7 / uniquePriorities.length)
+      
+      uniquePriorities.forEach(category => {
+        if (FALLBACK_RECOMMENDATIONS[category]) {
+          const shuffled = [...FALLBACK_RECOMMENDATIONS[category]].sort(() => Math.random() - 0.5)
+          selected.push(...shuffled.slice(0, perPriorityCategory))
+        }
+      })
+      
+      // Fill remaining with other categories
+      const remainingCount = count - selected.length
+      const otherCategories = categories.filter(cat => !uniquePriorities.includes(cat))
+      const perOtherCategory = Math.floor(remainingCount / otherCategories.length)
+      
+      otherCategories.forEach(category => {
+        const shuffled = [...FALLBACK_RECOMMENDATIONS[category]].sort(() => Math.random() - 0.5)
+        selected.push(...shuffled.slice(0, perOtherCategory))
+      })
+    }
+  }
   
-  // Final shuffle to mix categories
+  // If no specific preferences or not enough selected, use equal distribution
+  if (selected.length < count * 0.5) {
+    selected = []
+    const perCategory = Math.floor(count / categories.length)
+    const remainder = count % categories.length
+    
+    categories.forEach((category, index) => {
+      const categoryAnime = FALLBACK_RECOMMENDATIONS[category]
+      const takeCount = perCategory + (index < remainder ? 1 : 0)
+      
+      const shuffled = [...categoryAnime].sort(() => Math.random() - 0.5)
+      selected.push(...shuffled.slice(0, takeCount))
+    })
+  }
+  
+  // Filter out deal-breakers if specified
+  if (dealbreakers && dealbreakers.length > 0) {
+    // Simple filtering - remove obviously problematic titles based on deal-breakers
+    if (dealbreakers.includes('violence')) {
+      selected = selected.filter(title => 
+        !['Tokyo Ghoul', 'Attack on Titan', 'Chainsaw Man', 'Future Diary', 'Another'].includes(title)
+      )
+    }
+    if (dealbreakers.includes('old')) {
+      selected = selected.filter(title => 
+        !['Cowboy Bebop', 'Neon Genesis Evangelion', 'Akira', 'Ghost in the Shell'].includes(title)
+      )
+    }
+  }
+  
+  // Final shuffle and limit
   return selected.sort(() => Math.random() - 0.5).slice(0, count)
 }
 
@@ -44,15 +105,15 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
     const sessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9)
     const prompt = buildPrompt(userPreferences, sessionId)
     
-    // Increase temperature for more variety, add randomness
-    const temperature = 0.8 + (Math.random() * 0.2) // 0.8-1.0 for more creativity
+    // Balance accuracy with controlled variety
+    const temperature = 0.6 + (Math.random() * 0.2) // 0.6-0.8 for focused but varied responses
     
     const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
       model: 'meta-llama/llama-3.1-8b-instruct:free',
       messages: [
         {
           role: 'system',
-          content: 'You are an anime recommendation expert with extensive knowledge of both popular and obscure anime. Always respond with ONLY a valid JSON array of exactly 15 diverse anime titles in English. Prioritize variety and avoid repetitive suggestions. No explanations, just the JSON array.'
+          content: 'You are a precise anime recommendation expert. Your goal is ACCURACY - recommend anime that exactly match user preferences. Focus on what they specifically want rather than random variety. Always respond with ONLY a valid JSON array of exactly 15 anime titles in English that closely match their criteria. No explanations, just the JSON array.'
         },
         {
           role: 'user',
@@ -61,9 +122,9 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
       ],
       max_tokens: 800,
       temperature: temperature,
-      top_p: 0.9, // Add nucleus sampling for more diversity
-      frequency_penalty: 0.5, // Reduce repetition
-      presence_penalty: 0.3 // Encourage new topics
+      top_p: 0.85, // Slightly more focused sampling
+      frequency_penalty: 0.3, // Moderate repetition reduction
+      presence_penalty: 0.1 // Light encouragement for variety
     }, {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -124,9 +185,9 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
       return getAIRecommendations(userPreferences, retryCount + 1)
     }
     
-    // If all retries failed, use diverse fallback recommendations
-    console.log('All AI attempts failed, using diverse fallback recommendations')
-    return getDiverseFallbacks(15)
+    // If all retries failed, use user-preference-aware fallback recommendations
+    console.log('All AI attempts failed, using preference-aware fallback recommendations')
+    return getDiverseFallbacks(15, userPreferences)
   }
 }
 
@@ -220,73 +281,78 @@ async function getAnimeDetails(titles) {
   return results
 }
 
-// Build AI prompt based on user preferences with randomization for diversity
+// Build AI prompt based on user preferences with smart accuracy and controlled diversity
 function buildPrompt(preferences, sessionId = null) {
   const { favoriteAnime, vibe, genres, dealbreakers, keywords } = preferences
   
-  // Add randomization elements to prevent identical recommendations
-  const diversityPrompts = [
-    'Discover fresh anime recommendations based on these preferences:',
-    'Find unique anime titles matching these criteria:',
-    'Suggest diverse anime series based on the following:',
-    'Recommend varied anime titles considering these preferences:',
-    'Explore different anime options matching these requirements:'
-  ]
+  let prompt = 'You are an expert anime curator. Based on these EXACT preferences, recommend 15 anime titles that match what the user specifically wants:\n\n'
   
-  const randomPromptStart = diversityPrompts[Math.floor(Math.random() * diversityPrompts.length)]
-  let prompt = `${randomPromptStart}\n\n`
-  
+  // PRIORITY 1: User's favorite anime (most important for accuracy)
   if (favoriteAnime?.trim()) {
-    prompt += `Reference anime: "${favoriteAnime}" (suggest similar but different titles)\n`
+    prompt += `🎯 MOST IMPORTANT - User loves: "${favoriteAnime}"\n`
+    prompt += `Find anime with similar themes, tone, genre, or storytelling style to "${favoriteAnime}". This is the primary reference point.\n\n`
   }
   
+  // PRIORITY 2: Vibe/Mood (second most important)
   if (vibe) {
     const vibeDescriptions = {
-      epic: 'Epic & Intense: Fast-paced action, high stakes, thrilling moments',
-      relaxing: 'Relaxing & Heartwarming: Cozy, low-stress stories about characters',
-      funny: 'Funny & Lighthearted: Comedy, parody, satirical content',
-      dark: 'Dark & Thought-Provoking: Complex themes, psychological depth'
+      epic: 'Epic & Intense: High-stakes action, intense battles, heroic journeys, adrenaline-pumping scenes',
+      relaxing: 'Relaxing & Heartwarming: Cozy atmosphere, feel-good stories, peaceful settings, emotional warmth',
+      funny: 'Funny & Lighthearted: Comedy-focused, humorous situations, parody elements, makes you laugh',
+      dark: 'Dark & Thought-Provoking: Psychological depth, mature themes, complex moral questions, serious tone'
     }
-    prompt += `Desired mood: ${vibeDescriptions[vibe] || vibe}\n`
+    prompt += `🎭 REQUIRED VIBE: ${vibeDescriptions[vibe] || vibe}\n`
+    prompt += `Every recommendation MUST match this exact mood and feeling.\n\n`
   }
   
+  // PRIORITY 3: Specific genres (user's explicit preferences)
   if (genres && genres.length > 0) {
-    prompt += `Preferred genres: ${genres.join(', ')}\n`
+    prompt += `📋 MUST INCLUDE GENRES: ${genres.join(', ')}\n`
+    prompt += `Focus heavily on these genres. At least 80% of recommendations should feature these genres prominently.\n\n`
   }
   
+  // PRIORITY 4: Deal-breakers (what to absolutely avoid)
   if (dealbreakers && dealbreakers.length > 0) {
     const dealbreakerDescriptions = {
-      slow: 'Avoid slow pacing',
-      complex: 'Avoid complex plots', 
-      violence: 'Avoid excessive violence/gore',
-      old: 'Avoid older animation styles (prefer post-2010)'
+      slow: 'NO slow pacing - must have engaging, well-paced storytelling',
+      complex: 'NO overly complex plots - keep stories straightforward and easy to follow',
+      violence: 'NO excessive violence or gore - avoid graphic content',
+      old: 'NO old animation - only modern animation quality (2010 or newer)'
     }
     const avoidList = dealbreakers.map(db => dealbreakerDescriptions[db] || db)
-    prompt += `Exclude: ${avoidList.join(', ')}\n`
+    prompt += `❌ ABSOLUTELY AVOID: ${avoidList.join(' | ')}\n`
+    prompt += `These are deal-breakers. Do NOT recommend anything with these elements.\n\n`
   }
   
+  // PRIORITY 5: Keywords/themes (specific elements user wants)
   if (keywords?.trim()) {
-    prompt += `Themes/elements: "${keywords}"\n`
+    prompt += `🔍 SPECIFIC THEMES WANTED: "${keywords}"\n`
+    prompt += `Include anime that specifically feature these themes, elements, or characteristics.\n\n`
   }
   
-  // Add diversity instructions
-  const diversityInstructions = [
-    'Include a mix of popular and hidden gems.',
-    'Vary between different time periods and studios.',
-    'Balance mainstream hits with lesser-known quality series.',
-    'Mix different sub-genres and storytelling styles.',
-    'Include both classic and modern recommendations.'
-  ]
+  // Smart diversity (only add if we have strong preferences to work with)
+  const hasStrongPreferences = favoriteAnime?.trim() || vibe || (genres && genres.length > 0)
+  if (hasStrongPreferences) {
+    prompt += `📊 SMART VARIETY: While staying true to the above preferences, include:\n`
+    prompt += `- Mix of popular titles and quality hidden gems\n`
+    prompt += `- Different studios and time periods (but matching the vibe)\n`
+    prompt += `- Varying episode counts (series, movies, short series)\n\n`
+  }
   
-  const randomDiversity = diversityInstructions[Math.floor(Math.random() * diversityInstructions.length)]
-  prompt += `\nDiversity requirement: ${randomDiversity}\n`
-  
-  // Add session-based variation if provided
+  // Add subtle session variation only if we have a session ID
   if (sessionId) {
-    prompt += `Session context: ${sessionId.slice(-8)} (ensure variety from previous requests)\n`
+    const sessionVariation = parseInt(sessionId.slice(-2), 16) % 3
+    const variations = [
+      'Prioritize highly-rated titles that match the criteria.',
+      'Include some lesser-known gems alongside popular matches.',
+      'Balance classic favorites with newer releases in the same style.'
+    ]
+    prompt += `💡 ${variations[sessionVariation]}\n\n`
   }
   
-  prompt += '\nRespond with ONLY a valid JSON array of exactly 15 diverse anime titles in English. No explanations, just the array: ["Title 1", "Title 2", ...]'
+  // Final instruction emphasizing accuracy
+  prompt += `🎯 ACCURACY IS KEY: Every recommendation must clearly match the user's stated preferences. Quality over random variety.\n`
+  prompt += `Respond with ONLY a JSON array of exactly 15 anime titles in English: ["Title 1", "Title 2", ...]`
   
   return prompt
 }
@@ -318,8 +384,8 @@ async function getRecommendations(userPreferences) {
     
     // If we have very few results, ensure we have at least some recommendations
     if (uniqueResults.length < 3) {
-      console.log('Too few results, trying diverse fallback titles...')
-      const fallbackTitles = getDiverseFallbacks(10)
+      console.log('Too few results, trying preference-aware fallback titles...')
+      const fallbackTitles = getDiverseFallbacks(10, userPreferences)
       const fallbackDetails = await getAnimeDetails(fallbackTitles)
       const combinedResults = [...uniqueResults, ...fallbackDetails]
         .reduce((acc, current) => {
@@ -340,10 +406,10 @@ async function getRecommendations(userPreferences) {
   } catch (error) {
     console.error('Error in getRecommendations:', error)
     
-    // Last resort: return diverse fallback recommendations with details
+    // Last resort: return preference-aware fallback recommendations with details
     try {
-      console.log('Using complete diverse fallback system...')
-      const fallbackTitles = getDiverseFallbacks(15)
+      console.log('Using complete preference-aware fallback system...')
+      const fallbackTitles = getDiverseFallbacks(15, userPreferences)
       const fallbackDetails = await getAnimeDetails(fallbackTitles)
       return fallbackDetails.slice(0, 15)
     } catch (fallbackError) {
