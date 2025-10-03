@@ -25,7 +25,7 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://animert-1631x50tf-mecs-projects-96110a08.vercel.app',
+        'HTTP-Referer': 'https://animert-two.vercel.app',
         'X-Title': 'Anime Recommendation Terminal'
       },
       timeout: 30000
