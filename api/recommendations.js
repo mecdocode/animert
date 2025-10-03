@@ -1,4 +1,4 @@
-import { getRecommendations } from '../server/services/recommendationService.js'
+import { getRecommendations } from '../server/services/csvRecommendationService.js'
 
 export default async function handler(req, res) {
   // Enable CORS
@@ -25,15 +25,6 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       console.log('Received recommendation request:', JSON.stringify(req.body, null, 2))
-      
-      // Check if API key is configured
-      if (!process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY === 'your_openrouter_api_key_here') {
-        console.error('OPENROUTER_API_KEY not configured')
-        return res.status(503).json({
-          error: 'CONFIGURATION_ERROR',
-          message: 'API service not properly configured. Please contact administrator.'
-        })
-      }
       
       const { favoriteAnime, vibe, genres, dealbreakers, keywords } = req.body
       
@@ -65,17 +56,17 @@ export default async function handler(req, res) {
       console.error('Error in recommendations endpoint:', error)
       
       // Handle specific error types
-      if (error.message.includes('AI_CONNECTION_ERROR')) {
-        return res.status(503).json({
-          error: 'AI_CONNECTION_ERROR',
-          message: 'Could not generate titles. Please try again later.'
+      if (error.message.includes('No suitable anime found')) {
+        return res.status(404).json({
+          error: 'NO_MATCHES_FOUND',
+          message: 'No anime found matching your preferences. Try adjusting your criteria.'
         })
       }
       
-      if (error.message.includes('ANILIST_DB_ERROR')) {
+      if (error.message.includes('Failed to load anime database')) {
         return res.status(503).json({
-          error: 'ANILIST_DB_ERROR',
-          message: 'Could not retrieve anime details.'
+          error: 'DATABASE_ERROR',
+          message: 'Anime database temporarily unavailable. Please try again later.'
         })
       }
 
