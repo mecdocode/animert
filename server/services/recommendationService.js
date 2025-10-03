@@ -2,10 +2,14 @@ import axios from 'axios'
 
 // OpenRouter AI Service
 async function getAIRecommendations(userPreferences, retryCount = 0) {
-  const maxRetries = 2
+  const maxRetries = 6  // Increased to try all models
   
   // Try different models in order of preference
   const models = [
+    'google/gemma-3n-e2b-it:free',
+    'meta-llama/llama-4-scout:free', 
+    'meta-llama/llama-3.3-8b-instruct:free',
+    'google/gemma-3n-e4b-it:free',
     'meta-llama/llama-3.1-8b-instruct:free',
     'microsoft/wizardlm-2-8x22b:free',
     'google/gemma-2-9b-it:free'
@@ -50,6 +54,8 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
     if (!aiResponse) {
       throw new Error('Empty response from AI')
     }
+    
+    console.log(`✅ Model ${currentModel} succeeded!`)
 
     // Parse and validate the response
     let titles
@@ -82,8 +88,9 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
     return validTitles
 
   } catch (error) {
-    console.error(`AI request failed (attempt ${retryCount + 1}):`, error.message)
+    console.error(`❌ Model ${currentModel} failed (attempt ${retryCount + 1}/${maxRetries + 1}):`, error.message)
     console.error('Full error details:', {
+      model: currentModel,
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
@@ -91,11 +98,13 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
     })
     
     if (retryCount < maxRetries) {
-      console.log(`Retrying AI request in 2 seconds...`)
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      const nextModel = models[Math.min(retryCount + 1, models.length - 1)]
+      console.log(`🔄 Trying next model: ${nextModel} in 1 second...`)
+      await new Promise(resolve => setTimeout(resolve, 1000))
       return getAIRecommendations(userPreferences, retryCount + 1)
     }
     
+    console.error('💥 All models failed! Tried:', models.slice(0, retryCount + 1))
     throw new Error('AI_CONNECTION_ERROR: Could not generate recommendations')
   }
 }
