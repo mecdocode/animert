@@ -4,11 +4,25 @@ import axios from 'axios'
 async function getAIRecommendations(userPreferences, retryCount = 0) {
   const maxRetries = 2
   
+  // Try different models in order of preference
+  const models = [
+    'meta-llama/llama-3.1-8b-instruct:free',
+    'microsoft/wizardlm-2-8x22b:free',
+    'google/gemma-2-9b-it:free'
+  ]
+  
+  const currentModel = models[Math.min(retryCount, models.length - 1)]
+  
   try {
     const prompt = buildPrompt(userPreferences)
     
+    console.log(`Making OpenRouter API request (attempt ${retryCount + 1})...`)
+    console.log('Using model:', currentModel)
+    console.log('API Key present:', !!process.env.OPENROUTER_API_KEY)
+    console.log('API Key length:', process.env.OPENROUTER_API_KEY?.length || 0)
+    
     const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: 'meta-llama/llama-3.3-8b-instruct:free',
+      model: currentModel,
       messages: [
         {
           role: 'system',
@@ -25,10 +39,10 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://animert-two.vercel.app',
+        'HTTP-Referer': 'https://animert-30vpckqiv-mecs-projects-96110a08.vercel.app',
         'X-Title': 'Anime Recommendation Terminal'
       },
-      timeout: 30000
+      timeout: 45000
     })
 
     const aiResponse = response.data.choices[0]?.message?.content?.trim()
@@ -69,10 +83,16 @@ async function getAIRecommendations(userPreferences, retryCount = 0) {
 
   } catch (error) {
     console.error(`AI request failed (attempt ${retryCount + 1}):`, error.message)
+    console.error('Full error details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      code: error.code
+    })
     
     if (retryCount < maxRetries) {
-      console.log(`Retrying AI request in 1 second...`)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      console.log(`Retrying AI request in 2 seconds...`)
+      await new Promise(resolve => setTimeout(resolve, 2000))
       return getAIRecommendations(userPreferences, retryCount + 1)
     }
     
